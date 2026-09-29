@@ -251,42 +251,48 @@ function getStudioChatbotResponse(input: string): string {
   return "Thank you for reaching out to Loop & Love! 🧶 We create sustainable, everlasting crochet art—including bouquets, bags, and plush amigurumi. Feel free to explore our Shop section, or ask me about bouquet styles, bag sizes, pricing, and custom gifts!";
 }
 
-function isValidStudioResponse(text: string): boolean {
-  if (!text || typeof text !== 'string') return false;
-  const trimmed = text.trim();
-  if (trimmed.length === 0) return false;
-  const lower = trimmed.toLowerCase();
+function cleanN8nResponse(text: string): string {
+  if (!text || typeof text !== 'string') return '';
+  let cleaned = text.trim();
 
-  // Reject internal errors or webhook setup errors
-  if (lower.includes('error in workflow') || lower.includes('webhook is not registered') || lower.includes('workflow must be active')) {
-    return false;
+  // Strip internal execution errors
+  if (/error in workflow/i.test(cleaned) || /webhook is not registered/i.test(cleaned) || /workflow must be active/i.test(cleaned)) {
+    return '';
   }
 
-  // Reject developer / prompt leak / system role confusion (e.g. LLM pretending to be a software developer or asking for files)
-  const devPhrases = [
-    'full-stack developer',
-    'security specialist',
-    'codebase understanding',
-    'phase 1',
-    'please provide the code',
-    'technical audit',
-    'standing by to review',
-    'server.ts',
-    'package.json',
-    'src/pages',
-    'src/app.tsx',
-    'authentication security specialist',
-    'temporary in-memory authentication',
-    'production-ready application',
+  // If the entire response is an AI role declaration as a developer, reject it so studio fallback answers
+  if (/ready to take on the role of your full-stack developer/i.test(cleaned) || /^hello! i am ready to take on the role/i.test(cleaned)) {
+    return '';
+  }
+
+  // Strip developer's note or codebase explanation appended at the end of the AI response
+  const devSeparators = [
+    /\n---*\s*\n*###?\s*💻?\s*Developer'?s?\s*Note/i,
+    /###?\s*💻?\s*Developer'?s?\s*Note/i,
+    /\n---*\s*\n*###?\s*💻?\s*Behind the Scenes/i,
+    /###?\s*💻?\s*Behind the Scenes/i,
+    /\n---*\s*\n*###?\s*🛠️?\s*Let'?s\s*Inspect/i,
+    /###?\s*🛠️?\s*Let'?s\s*Inspect/i,
+    /\n---*\s*\n*###?\s*How These Products Are Structured/i,
+    /###?\s*How These Products Are Structured/i,
+    /###?\s*Next Steps\s*🚀?/i,
+    /To get started on Phase \d/i,
+    /To proceed with \**Phase \d/i,
+    /Please share or paste the contents of your key files/i,
+    /Based on our technical diagnosis, we want to transition/i,
   ];
 
-  for (const phrase of devPhrases) {
-    if (lower.includes(phrase)) {
-      return false;
+  for (const sep of devSeparators) {
+    const match = cleaned.search(sep);
+    if (match !== -1) {
+      cleaned = cleaned.substring(0, match).trim();
     }
   }
 
-  return true;
+  // Remove dangling horizontal rules at the end if any
+  cleaned = cleaned.replace(/\n---+\s*$/, '').trim();
+
+  return cleaned;
 }
 
 app.all('/api/chatbot', async (req, res) => {
@@ -298,7 +304,8 @@ app.all('/api/chatbot', async (req, res) => {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
+    // Allow up to 25 seconds for cloud LLM reasoning
+    const timeout = setTimeout(() => controller.abort(), 25000);
 
     let rawText = '';
     let responseOk = false;
@@ -327,32 +334,27 @@ app.all('/api/chatbot', async (req, res) => {
       data = null;
     }
 
-    // If n8n succeeded, check that the output is actually a valid customer studio response
+    // Process n8n output
     if (responseOk && data) {
-      const outputText = Array.isArray(data) ? data[0]?.output : (data.output || data.text || data.message);
-      if (typeof outputText === 'string' && isValidStudioResponse(outputText)) {
-        return res.json(Array.isArray(data) ? data : [{ output: outputText }]);
+      const rawOutput = Array.isArray(data) ? data[0]?.output : (data.output || data.text || data.message);
+      if (typeof rawOutput === 'string') {
+        const cleaned = cleanN8nResponse(rawOutput);
+        if (cleaned.length > 10) {
+          return res.json([{ output: cleaned }]);
+        }
       }
-      console.warn(`[Chatbot Proxy] Rejected invalid/off-topic response from n8n (${outputText?.slice(0, 100)}...). Falling back to studio assistant.`);
+      console.warn(`[Chatbot Proxy] Cleaned n8n response was empty or contained errors (${rawOutput?.slice(0, 80)}...). Using studio assistant.`);
     } else {
-      console.warn(`[Chatbot Proxy] n8n returned status ${responseStatus} (${rawText?.slice(0, 100)}). Falling back to studio assistant.`);
+      console.warn(`[Chatbot Proxy] n8n returned status ${responseStatus}. Using studio assistant.`);
     }
 
-    // Provide an authentic, friendly studio answer
+    // Friendly studio response fallback
     const studioAnswer = getStudioChatbotResponse(userQuery);
-    return res.status(200).json([
-      {
-        output: studioAnswer,
-      },
-    ]);
+    return res.status(200).json([{ output: studioAnswer }]);
   } catch (error: any) {
     console.error('Chatbot webhook proxy error/timeout:', error?.message || error);
     const studioAnswer = getStudioChatbotResponse(userQuery);
-    return res.status(200).json([
-      {
-        output: studioAnswer,
-      },
-    ]);
+    return res.status(200).json([{ output: studioAnswer }]);
   }
 });
 
