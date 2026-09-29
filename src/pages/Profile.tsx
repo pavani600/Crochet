@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Package, User as UserIcon, LogOut, ShieldCheck } from 'lucide-react';
+import { Package, User as UserIcon, LogOut, ShieldCheck, AlertCircle, Loader2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 
 export default function Profile() {
@@ -11,6 +11,8 @@ export default function Profile() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(false);
   
   const [orders, setOrders] = useState<any[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
@@ -27,6 +29,9 @@ export default function Profile() {
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+    setAuthLoading(true);
+
     const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
     const body = isLogin ? { email, password } : { name, email, password };
     
@@ -43,16 +48,23 @@ export default function Profile() {
           navigate('/admin');
         }
       } else {
-        alert(data.error);
+        setError(data.error || 'Authentication failed. Please check your credentials.');
       }
-    } catch (err) {
-      alert('Authentication failed');
+    } catch (err: any) {
+      setError(err?.message || 'Unable to connect to the server. Please try again.');
+    } finally {
+      setAuthLoading(false);
     }
   };
 
   const handleLogout = () => {
     logout();
     navigate('/');
+  };
+
+  const toggleAuthMode = () => {
+    setIsLogin(!isLogin);
+    setError(null);
   };
 
   if (!user) {
@@ -63,27 +75,61 @@ export default function Profile() {
             <h2 className="text-3xl font-bold font-serif mb-2">{isLogin ? 'Welcome Back' : 'Create Account'}</h2>
             <p className="text-gray-500">Access your orders, wishlist, and more.</p>
           </div>
+
+          {error && (
+            <div className="mb-5 p-3.5 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg flex items-center gap-2.5 animate-fade-in">
+              <AlertCircle className="w-5 h-5 flex-shrink-0 text-red-500" />
+              <span>{error}</span>
+            </div>
+          )}
+
           <form onSubmit={handleAuth} className="space-y-5">
             {!isLogin && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                <input type="text" required value={name} onChange={e=>setName(e.target.value)} className="w-full p-3 border rounded-md focus:border-brand-brown outline-none" />
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={e => { setName(e.target.value); setError(null); }}
+                  className="w-full p-3 border rounded-md focus:border-brand-brown outline-none"
+                  placeholder="e.g. Jane Doe"
+                />
               </div>
             )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-              <input type="email" required value={email} onChange={e=>setEmail(e.target.value)} className="w-full p-3 border rounded-md focus:border-brand-brown outline-none" />
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={e => { setEmail(e.target.value); setError(null); }}
+                className="w-full p-3 border rounded-md focus:border-brand-brown outline-none"
+                placeholder="name@example.com"
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <input type="password" required value={password} onChange={e=>setPassword(e.target.value)} className="w-full p-3 border rounded-md focus:border-brand-brown outline-none" />
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={e => { setPassword(e.target.value); setError(null); }}
+                className="w-full p-3 border rounded-md focus:border-brand-brown outline-none"
+                placeholder="••••••••"
+              />
             </div>
-            <button type="submit" className="w-full bg-brand-dark text-white py-3 rounded-md font-medium hover:bg-brand-brown transition-colors">
+            <button
+              type="submit"
+              disabled={authLoading}
+              className="w-full bg-brand-dark text-white py-3 rounded-md font-medium hover:bg-brand-brown transition-colors flex items-center justify-center gap-2 disabled:opacity-75"
+            >
+              {authLoading && <Loader2 className="w-4 h-4 animate-spin" />}
               {isLogin ? 'Sign In' : 'Sign Up'}
             </button>
           </form>
           <div className="mt-6 text-center text-sm">
-            <button onClick={() => setIsLogin(!isLogin)} className="text-brand-brown hover:underline">
+            <button onClick={toggleAuthMode} className="text-brand-brown hover:underline">
               {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
             </button>
           </div>

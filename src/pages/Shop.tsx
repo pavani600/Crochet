@@ -32,7 +32,7 @@ export default function Shop() {
     
     fetchProducts(query)
       .then(data => {
-        let sorted = [...data];
+        const sorted = [...data];
         if (sort === 'price-low') sorted.sort((a, b) => a.price - b.price);
         if (sort === 'price-high') sorted.sort((a, b) => b.price - a.price);
         // newest is default, assume id represents order or use createdAt

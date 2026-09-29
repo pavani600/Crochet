@@ -1,0 +1,115 @@
+{
+  "users": [
+    {
+      "id": "1",
+      "name": "Admin User",
+      "email": "admin@loopandlove.com",
+      "password": "password123",
+      "role": "admin",
+      "phone": "",
+      "addresses": []
+    },
+    {
+      "id": "2",
+      "name": "Test Customer",
+      "email": "customer@test.com",
+      "password": "password123",
+      "role": "customer",
+      "phone": "1234567890",
+      "addresses": [
+        {
+          "id": "a1",
+          "text": "123 Crochet St, Yarn City"
+        }
+      ]
+    },
+    {
+      "id": "1790592652467",
+      "name": "Sarah Crochet",
+      "email": "sarah@crochetstudio.com",
+      "password": "mypassword123",
+      "role": "customer",
+      "phone": "",
+      "addresses": []
+    }
+  ],
+  "products": [
+    {
+      "id": "p1",
+      "name": "Sunflower Bouquet",
+      "description": "Handcrafted beautiful sunflower bouquet.",
+      "price": 1500,
+      "category": "Crochet Flowers",
+      "images": [
+        "https://images.unsplash.com/photo-1596438459194-f215f91ebda3?w=500&q=80"
+      ],
+      "colors": [
+        "Yellow",
+        "Green"
+      ],
+      "stock": 10,
+      "createdAt": "2026-09-28T10:50:48.950Z"
+    },
+    {
+      "id": "p2",
+      "name": "Chunky Tote Bag",
+      "description": "Stylish and durable chunky yarn tote bag.",
+      "price": 2500,
+      "category": "Crochet Bags",
+      "images": [
+        "https://images.unsplash.com/photo-1601924994987-69e26d50dc26?w=500&q=80"
+      ],
+      "colors": [
+        "Beige",
+        "Sage"
+      ],
+      "stock": 5,
+      "createdAt": "2026-09-28T10:50:48.951Z"
+    },
+    {
+      "id": "p3",
+      "name": "Amigurumi Bunny",
+      "description": "Cute soft bunny plushie.",
+      "price": 1200,
+      "category": "Crochet Plushies",
+      "images": [
+        "https://images.unsplash.com/photo-1618842676088-c4d48a6a7c9d?w=500&q=80"
+      ],
+      "colors": [
+        "White",
+        "Pink"
+      ],
+      "stock": 15,
+      "createdAt": "2026-09-28T10:50:48.951Z"
+    },
+    {
+      "id": "p4",
+      "name": "Daisy Keychain",
+      "description": "Small lovely daisy keychain.",
+      "price": 300,
+      "category": "Crochet Keychains",
+      "images": [
+        "https://images.unsplash.com/photo-1596438459194-f215f91ebda3?w=500&q=80"
+      ],
+      "colors": [
+        "White",
+        "Yellow"
+      ],
+      "stock": 20,
+      "createdAt": "2026-09-28T10:50:48.951Z"
+    }
+  ],
+  "orders": [],
+  "reviews": [
+    {
+      "id": "r1",
+      "productId": "p1",
+      "userId": "2",
+      "userName": "Test Customer",
+      "rating": 5,
+      "text": "Absolutely beautiful craftsmanship!",
+      "date": "2026-09-28T10:50:48.951Z",
+      "verified": true
+    }
+  ]
+}
