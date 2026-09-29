@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 
@@ -75,11 +76,23 @@ function saveDb() {
   }
 }
 
+// --- Password Hashing Helper ---
+function hashPassword(pw: string): string {
+  return crypto.createHash('sha256').update(pw).digest('hex');
+}
+
 // --- API Routes ---
 
 app.post('/api/auth/login', (req, res) => {
   const { email, password } = req.body;
-  const user = db.users.find(u => u.email?.toLowerCase() === email?.toLowerCase().trim() && u.password === password);
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+  const hashed = hashPassword(password);
+  const user = db.users.find(u =>
+    u.email?.toLowerCase() === email?.toLowerCase().trim() &&
+    (u.password === password || u.password === hashed)
+  );
   if (user) {
     const userWithoutPassword = { ...user };
     delete userWithoutPassword.password;
@@ -102,7 +115,7 @@ app.post('/api/auth/register', (req, res) => {
     id: Date.now().toString(),
     name: name.trim(),
     email: cleanEmail,
-    password,
+    password: hashPassword(password),
     role: 'customer',
     phone: '',
     addresses: []
@@ -227,7 +240,53 @@ function getStudioChatbotResponse(input: string): string {
     return "We want you to love your crafts! We offer 14-day hassle-free returns on standard items in unused condition. For any questions, please reach out to us at support@loopandlove.com.";
   }
 
+  if (query.includes('account') || query.includes('login') || query.includes('register') || query.includes('signup') || query.includes('password') || query.includes('profile')) {
+    return "You can log in or register for a Loop & Love account anytime by clicking the Profile icon in the top navigation bar! With an account, you can securely track orders, save your delivery addresses, and leave reviews for your favorite crochet pieces.";
+  }
+
+  if (query.includes('security') || query.includes('safe') || query.includes('data') || query.includes('privacy') || query.includes('secure')) {
+    return "Your account and order details are safely encrypted and securely stored. We respect your privacy and never share your personal information or payment details.";
+  }
+
   return "Thank you for reaching out to Loop & Love! 🧶 We create sustainable, everlasting crochet art—including bouquets, bags, and plush amigurumi. Feel free to explore our Shop section, or ask me about bouquet styles, bag sizes, pricing, and custom gifts!";
+}
+
+function isValidStudioResponse(text: string): boolean {
+  if (!text || typeof text !== 'string') return false;
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return false;
+  const lower = trimmed.toLowerCase();
+
+  // Reject internal errors or webhook setup errors
+  if (lower.includes('error in workflow') || lower.includes('webhook is not registered') || lower.includes('workflow must be active')) {
+    return false;
+  }
+
+  // Reject developer / prompt leak / system role confusion (e.g. LLM pretending to be a software developer or asking for files)
+  const devPhrases = [
+    'full-stack developer',
+    'security specialist',
+    'codebase understanding',
+    'phase 1',
+    'please provide the code',
+    'technical audit',
+    'standing by to review',
+    'server.ts',
+    'package.json',
+    'src/pages',
+    'src/app.tsx',
+    'authentication security specialist',
+    'temporary in-memory authentication',
+    'production-ready application',
+  ];
+
+  for (const phrase of devPhrases) {
+    if (lower.includes(phrase)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 app.all('/api/chatbot', async (req, res) => {
@@ -238,15 +297,29 @@ app.all('/api/chatbot', async (req, res) => {
   const userQuery = req.body?.chatInput || req.body?.message || '';
 
   try {
-    const response = await fetch(N8N_CHAT_WEBHOOK_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(req.body || {}),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
 
-    const rawText = await response.text();
+    let rawText = '';
+    let responseOk = false;
+    let responseStatus = 500;
+
+    try {
+      const response = await fetch(N8N_CHAT_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(req.body || {}),
+        signal: controller.signal,
+      });
+      responseOk = response.ok;
+      responseStatus = response.status;
+      rawText = await response.text();
+    } finally {
+      clearTimeout(timeout);
+    }
+
     let data: any = null;
     try {
       data = JSON.parse(rawText);
@@ -254,18 +327,18 @@ app.all('/api/chatbot', async (req, res) => {
       data = null;
     }
 
-    // If n8n succeeded and returned a valid response, return it directly
-    if (response.ok && data) {
-      // Check if data is array or object with output/text
+    // If n8n succeeded, check that the output is actually a valid customer studio response
+    if (responseOk && data) {
       const outputText = Array.isArray(data) ? data[0]?.output : (data.output || data.text || data.message);
-      if (outputText && typeof outputText === 'string' && outputText.trim()) {
+      if (typeof outputText === 'string' && isValidStudioResponse(outputText)) {
         return res.json(Array.isArray(data) ? data : [{ output: outputText }]);
       }
+      console.warn(`[Chatbot Proxy] Rejected invalid/off-topic response from n8n (${outputText?.slice(0, 100)}...). Falling back to studio assistant.`);
+    } else {
+      console.warn(`[Chatbot Proxy] n8n returned status ${responseStatus} (${rawText?.slice(0, 100)}). Falling back to studio assistant.`);
     }
 
-    // If n8n workflow returned an error (HTTP 500 "Error in workflow" or 404 inactive),
-    // provide an intelligent studio answer instead of showing an error to the user
-    console.warn(`[Chatbot Proxy] n8n returned status ${response.status} (${rawText}). Falling back to studio assistant.`);
+    // Provide an authentic, friendly studio answer
     const studioAnswer = getStudioChatbotResponse(userQuery);
     return res.status(200).json([
       {
@@ -273,7 +346,7 @@ app.all('/api/chatbot', async (req, res) => {
       },
     ]);
   } catch (error: any) {
-    console.error('Chatbot webhook proxy error:', error);
+    console.error('Chatbot webhook proxy error/timeout:', error?.message || error);
     const studioAnswer = getStudioChatbotResponse(userQuery);
     return res.status(200).json([
       {

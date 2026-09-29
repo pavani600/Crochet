@@ -31,6 +31,15 @@
       "role": "customer",
       "phone": "",
       "addresses": []
+    },
+    {
+      "id": "1790656377739",
+      "name": "Emma Craft",
+      "email": "emma@testcrochet.com",
+      "password": "68e8e213d72156bb64a8cfb39c2ec4d7750af7577c8306f3aefcdf19bd84945e",
+      "role": "customer",
+      "phone": "",
+      "addresses": []
     }
   ],
   "products": [
